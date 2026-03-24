@@ -18,53 +18,52 @@ class AlternativeExplorerLLMAgent(BaseLLMAgent):
         prompt=f'''
         You are a career advisor.
 
-        User sream career: {dream_career}
+        User dream career: {dream_career}
         Viability Score: {viability}
 
-        Sugges 5 alternative careers.
+        Suggest 5 alternative careers.
 
-        For each include:
-        - career
-        - similarity_to_dream (0-1)
-        - viability_estimate (0-1)
-        - reasoning
-        - transition_effort (Low/Medium/High)
-
-        return concise structured recommendations.
+        Return only valid JSON with this exact shape:
+        {{
+          "alternatives": [
+            {{
+              "career": "string",
+              "similarity_to_dream": number,
+              "viability_estimate": number,
+              "reasoning": "string",
+              "transition_effort": "Low|Medium|High"
+            }}
+          ],
+          "summary": "string"
+        }}
         '''
 
         try:
-            response = self.generate(
+            result = self.generate_structured_json(
                 prompt=prompt,
+                required_fields=["alternatives", "summary"],
                 temperature=0.6,
                 max_tokens=1200
             )
-            
-            text=str(response)
-            alternatives: List[Dict[str, Any]]=[]
-            track = career_track(dream_career)
-            default_names = {
-                "data": ["Data Analyst", "ML Engineer", "Analytics Engineer", "BI Developer", "AI Product Analyst"],
-                "product": ["Business Analyst", "Program Manager", "Growth Product Analyst", "Operations Manager", "Customer Success Strategist"],
-                "design": ["UX Researcher", "Product Designer", "Interaction Designer", "Design System Specialist", "Content Designer"],
-                "marketing": ["Growth Marketer", "Performance Marketer", "Brand Strategist", "CRM Specialist", "Marketing Analyst"],
-                "software": ["Backend Developer", "Full Stack Developer", "QA Automation Engineer", "DevOps Engineer", "Solutions Engineer"],
-            }[track]
-
-            for i, name in enumerate(default_names):
+            raw_alternatives = result.get("alternatives", [])
+            alternatives: List[Dict[str, Any]] = []
+            for alt in raw_alternatives[:5]:
+                if not isinstance(alt, dict):
+                    continue
                 alternatives.append(
                     {
-                        "career": name,
-                        "similarity_to_dream": round(max(0.55, 0.82 - i * 0.05), 2),
-                        "viability_estimate": round(max(0.58, min(0.9, viability + 0.1 - i * 0.03)), 2),
-                        "reasoning": text[:200],
-                        "transition_effort": "Medium",
+                        "career": str(alt.get("career", "")),
+                        "similarity_to_dream": max(0.0, min(1.0, float(alt.get("similarity_to_dream", 0.0)))),
+                        "viability_estimate": max(0.0, min(1.0, float(alt.get("viability_estimate", 0.0)))),
+                        "reasoning": str(alt.get("reasoning", "")),
+                        "transition_effort": str(alt.get("transition_effort", "Medium")),
                     }
                 )
-            
+            if not alternatives:
+                raise ValueError("LLM returned empty alternatives list")
             return {
                 "alternatives": alternatives,
-                "summary": "Generated alternative career paths",
+                "summary": str(result.get("summary", "Generated alternative career paths")),
                 "status": "success",
             }
 

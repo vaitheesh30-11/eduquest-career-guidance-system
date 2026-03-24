@@ -15,31 +15,40 @@ class RealityCheckFullLLMAgent(BaseLLMAgent):
         track = career_track(career)
         mode = learning_mode(ml_results.get("constraints_summary", ""))
         prompt = f"""
-        Provide a realistic assessment of achieving this career.
+        You are a practical career advisor.
+        Return only valid JSON with this exact shape:
+        {{
+          "honest_assessment": "string",
+          "major_challenges": ["string", "string", "string", "string"],
+          "success_probability": number,
+          "mindset_requirements": ["string", "string", "string"]
+        }}
+
+        Provide a realistic assessment of achieving this career: {career}.
         Viability Score: {viability}
         Academic Fit Score: {academic_fit}
-        Give :
-        -Honest assessment
-        -major challenges (4)
-        - success probability
-        - mindset requirements (3)
         """
         try :
-            response = self.generate(prompt,temperature =0.5,max_tokens =1000)
-            challenge_map = {
-                "data": ["Statistics and tooling depth", "Standing out with portfolio evidence", "Keeping pace with market expectations", "Balancing theory and practical work"],
-                "product": ["Building strong product judgment", "Creating credible case studies", "Cross-functional communication", "Competing with experienced PM candidates"],
-                "design": ["Portfolio quality bar", "User research depth", "Design critique and iteration speed", "Competition from specialized designers"],
-                "marketing": ["Proving measurable campaign impact", "Keeping up with platform changes", "Building analytics fluency", "Crowded applicant pools"],
-                "software": ["Strengthening engineering fundamentals", "Building real projects", "Interview preparation consistency", "Competition from experienced candidates"],
-            }
-            mindset = ["Consistency", "Long-term focus", "Adaptability"]
+            result = self.generate_structured_json(
+                prompt=prompt,
+                required_fields=[
+                    "honest_assessment",
+                    "major_challenges",
+                    "success_probability",
+                    "mindset_requirements",
+                ],
+                temperature=0.5,
+                max_tokens=1000,
+            )
+            mindset = result.get("mindset_requirements", [])
             if mode == "part_time":
-                mindset.append("Disciplined scheduling around existing commitments")
+                mindset = mindset + ["Disciplined scheduling around existing commitments"]
+            success_probability = float(result.get("success_probability", round(viability * 100, 1)))
+            success_probability = max(0.0, min(100.0, success_probability))
             return {
-                "honest_assessment":response[:200],
-                "major_challenges": challenge_map[track],
-                "success_probability": round(viability*100,1),
+                "honest_assessment": str(result.get("honest_assessment", "")),
+                "major_challenges": list(result.get("major_challenges", []))[:5],
+                "success_probability": round(success_probability, 1),
                 "mindset_requirements": mindset,
                 "status":"success",
 
@@ -47,7 +56,7 @@ class RealityCheckFullLLMAgent(BaseLLMAgent):
         except Exception :
             # Intelligent fallback assessment based on ML scores
             viability_pct = round(viability * 100, 1)
-            academic_pct = round(academic_fit * 100, 1)
+            academic_pct = round(academic_fit if academic_fit > 1 else academic_fit * 100, 1)
             
             # Determine assessment tone based on scores
             if viability >= 0.7:

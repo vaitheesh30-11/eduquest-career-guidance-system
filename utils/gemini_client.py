@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -92,8 +93,8 @@ def _clean_json_text(text: str) -> str:
     Keeps the content intact while making it easier to parse as JSON.
     """
     cleaned = text.strip()
-    cleaned = str.replace(r"```json\s*", "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
-    cleaned = str.replace(r"```", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"```json\s*", "", cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    cleaned = re.sub(r"```", "", cleaned, flags=re.MULTILINE)
     return cleaned.strip()
 
 
@@ -106,7 +107,7 @@ def _strip_trailing_commas(text: str) -> str:
     current = text
     while current != previous:
         previous = current
-        current = str.replace(r",\s*([}\]])", r"\1", current)
+        current = re.sub(r",\s*([}\]])", r"\1", current)
     return current
 
 
@@ -138,16 +139,22 @@ class GeminiClient:
         self.client = None
         self.model_instance = None
         self.is_initialized = False
+        self.last_error = None
         
         # Try to initialize, but don't fail if API key is missing
         try:
             if self.api_keys:
                 self._initialize_client()
                 self.is_initialized = True
+                self.last_error = None
             else:
+                self.last_error = "No Gemini API keys found"
                 logger.warning(f"No Gemini API keys found. Client will operate in mock mode.")
+                print("GEMINI DEBUG: no API keys found; running in mock mode", file=sys.stderr)
         except Exception as e:
+            self.last_error = str(e)
             logger.warning(f"Failed to initialize Gemini client: {str(e)}. Client will operate in mock mode.")
+            print(f"GEMINI DEBUG: initialization failed -> {str(e)}", file=sys.stderr)
 
     def _initialize_client(self):
         """Initialize client with current API key"""
@@ -167,6 +174,11 @@ class GeminiClient:
             self.model_instance = self.client.generate_content
 
         logger.info(f"Initialized Gemini client with API key {self.current_key_index + 1}/{len(self.api_keys)} (API: {'new' if is_new_api else 'old'})")
+        print(
+            f"GEMINI DEBUG: initialized with key {self.current_key_index + 1}/{len(self.api_keys)} "
+            f"model={self.model} sdk={genai_module}",
+            file=sys.stderr,
+        )
 
     def _rotate_api_key(self):
         """Rotate to next available API key"""
@@ -212,6 +224,7 @@ class GeminiClient:
                 if not response_text:
                     raise ValueError("Empty response from LLM")
 
+                self.last_error = None
                 return response_text
 
             except Exception as e:
@@ -221,7 +234,9 @@ class GeminiClient:
                 if any(quota_indicator in error_str for quota_indicator in [
                     "429", "quota", "rate limit", "exceeded", "per_minute", "per_day"
                 ]):
+                    self.last_error = error_str
                     logger.warning(f"Quota exceeded on key {self.current_key_index + 1}: {error_str}")
+                    print(f"GEMINI DEBUG: quota/rate issue on key {self.current_key_index + 1}: {error_str}", file=sys.stderr)
                     attempt += 1
 
                     if attempt < max_retries:
@@ -235,10 +250,22 @@ class GeminiClient:
                         raise ValueError(f"All {len(self.api_keys)} API keys quota exceeded. Please wait before retrying.")
                 else:
                     # Non-quota errors should fail immediately
+                    self.last_error = error_str
                     logger.error(f"LLM API error: {error_str}")
+                    print(f"GEMINI DEBUG: API call failed on key {self.current_key_index + 1}: {error_str}", file=sys.stderr)
                     raise ValueError(f"Failed to generate content from LLM: {error_str}")
 
         raise ValueError("Failed to generate content after all retries")
+
+    def debug_status(self) -> Dict[str, Any]:
+        return {
+            "is_initialized": self.is_initialized,
+            "model": self.model,
+            "sdk": genai_module,
+            "api_keys_detected": len(self.api_keys),
+            "current_key_index": self.current_key_index + 1 if self.api_keys else 0,
+            "last_error": self.last_error,
+        }
 
     def extract_json_from_response(self, response_text: str) -> Dict[str, Any]:
         try:

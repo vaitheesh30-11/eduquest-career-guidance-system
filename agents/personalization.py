@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def split_items(text: str) -> List[str]:
@@ -33,21 +33,15 @@ def infer_timeline(constraints: str, concerns: str) -> str:
 
 def infer_education_level(current_academics: str) -> str:
     text = (current_academics or "").lower()
-    mapping = [
-        ("phd", "PhD"),
-        ("doctorate", "PhD"),
-        ("master", "Master"),
-        ("mba", "Master"),
-        ("bachelor", "Bachelor"),
-        ("b.tech", "Bachelor"),
-        ("btech", "Bachelor"),
-        ("undergraduate", "Bachelor"),
-        ("diploma", "Diploma"),
-        ("12th", "High School"),
-        ("high school", "High School"),
+    pattern_mapping = [
+        (r"\bphd\b|\bdoctorate\b", "PhD"),
+        (r"\bmaster\b|\bm\.?tech\b|\bmtech\b|\bm\.?e\b|\bmba\b", "Master"),
+        (r"\bbachelor\b|\bundergraduate\b|\bb\.?tech\b|\bbtech\b|\bb\.?e\b|\bbe in\b|\bbe\b", "Bachelor"),
+        (r"\bdiploma\b", "Diploma"),
+        (r"\b12th\b|\bhigh school\b", "High School"),
     ]
-    for token, label in mapping:
-        if token in text:
+    for pattern, label in pattern_mapping:
+        if re.search(pattern, text):
             return label
     return "Unknown"
 
@@ -73,7 +67,7 @@ def infer_degree_field(current_academics: str, dream_career: str) -> str:
     return dream_career or "Unknown"
 
 
-def infer_years_experience(current_academics: str, constraints: str) -> int:
+def infer_years_experience(current_academics: str, constraints: str) -> Optional[int]:
     text = f"{current_academics} {constraints}".lower()
     match = re.search(r"(\d+)\+?\s*(?:years|yrs)", text)
     if match:
@@ -82,10 +76,10 @@ def infer_years_experience(current_academics: str, constraints: str) -> int:
         return 0
     if any(token in text for token in ["working professional", "full-time", "part-time job"]):
         return 2
-    return 1
+    return None
 
 
-def infer_gpa(current_academics: str) -> float:
+def infer_gpa(current_academics: str) -> Optional[float]:
     text = current_academics or ""
     pct_match = re.search(r"(\d{2})(?:\.\d+)?\s*%", text)
     if pct_match:
@@ -93,37 +87,51 @@ def infer_gpa(current_academics: str) -> float:
     gpa_match = re.search(r"(\d(?:\.\d+)?)\s*/\s*4", text)
     if gpa_match:
         return max(0.0, min(float(gpa_match.group(1)) / 4.0, 1.0))
-    return 0.7
+    return None
 
 
-def infer_research_months(current_academics: str, interests: str) -> int:
+def infer_research_months(current_academics: str, interests: str) -> Optional[int]:
     text = f"{current_academics} {interests}".lower()
+    explicit_months = re.search(r"(\d+)\s*(?:months|month)\s*(?:of\s*)?(?:research|thesis)", text)
+    if explicit_months:
+        return int(explicit_months.group(1))
     if "research" in text or "thesis" in text:
         return 6
-    return 0
+    return None
 
 
-def infer_projects(current_academics: str, interests: str, concerns: str) -> int:
+def infer_projects(current_academics: str, interests: str, concerns: str) -> Optional[int]:
     text = f"{current_academics} {interests} {concerns}".lower()
     match = re.search(r"(\d+)\s*(?:projects|project)", text)
     if match:
         return max(1, int(match.group(1)))
     if "portfolio" in text or "github" in text:
         return 3
-    return 1
+    return None
 
 
 def career_track(career_field: str) -> str:
     text = (career_field or "").lower()
+    import sys
+    
     if any(token in text for token in ["data", "ai", "ml", "machine learning", "analytics"]):
+        print(f"career_track({career_field}) -> 'data'", file=sys.stderr)
         return "data"
     if any(token in text for token in ["product", "manager", "strategy", "business analyst"]):
+        print(f"career_track({career_field}) -> 'product'", file=sys.stderr)
         return "product"
     if any(token in text for token in ["design", "ux", "ui", "graphic"]):
+        print(f"career_track({career_field}) -> 'design'", file=sys.stderr)
         return "design"
     if any(token in text for token in ["marketing", "sales", "growth", "seo"]):
+        print(f"career_track({career_field}) -> 'marketing'", file=sys.stderr)
         return "marketing"
-    return "software"
+    if any(token in text for token in ["teacher", "teaching", "educator", "professor", "lecturer", "tutor", "faculty", "school"]):
+        print(f"career_track({career_field}) -> 'education'", file=sys.stderr)
+        return "education"
+    
+    print(f"career_track({career_field}) -> 'general' (DEFAULT)", file=sys.stderr)
+    return "general"
 
 
 def learning_mode(constraints: str) -> str:
@@ -155,13 +163,23 @@ def roadmap_theme(track: str) -> Dict[str, List[str]]:
             "build": ["campaign simulations", "portfolio metrics", "content systems"],
             "launch": ["interview stories", "market positioning", "job outreach"],
         },
+        "education": {
+            "foundation": ["subject mastery", "pedagogy fundamentals", "classroom communication"],
+            "build": ["lesson plans", "student engagement techniques", "assessment strategies"],
+            "launch": ["teaching demo preparation", "institution applications", "education network outreach"],
+        },
+        "general": {
+            "foundation": ["role fundamentals", "domain basics", "professional communication"],
+            "build": ["hands-on portfolio pieces", "real-world practice", "feedback-driven improvement"],
+            "launch": ["targeted applications", "interview preparation", "network outreach"],
+        },
         "software": {
             "foundation": ["core programming", "system fundamentals", "version control"],
             "build": ["end-to-end projects", "testing and deployment", "problem solving practice"],
             "launch": ["resume and GitHub polish", "interview preparation", "targeted applications"],
         },
     }
-    return themes.get(track, themes["software"])
+    return themes.get(track, themes["general"])
 
 
 def budget_ranges(budget: str) -> Dict[str, str]:
@@ -179,9 +197,11 @@ def city_hotspots(track: str) -> str:
         "product": "Bengaluru, Gurgaon, Mumbai, Startup hubs",
         "design": "Bengaluru, Mumbai, Remote product teams",
         "marketing": "Mumbai, Gurgaon, Bengaluru, Remote growth teams",
+        "education": "Delhi NCR, Bengaluru, Pune, Tier-2 city school networks, EdTech remote roles",
+        "general": "Major metro cities and remote-friendly roles, depending on specialization",
         "software": "Bengaluru, Hyderabad, Pune, Chennai, Remote engineering teams",
     }
-    return mapping.get(track, mapping["software"])
+    return mapping.get(track, mapping["general"])
 
 
 def market_salary(track: str, budget: str) -> str:
@@ -190,6 +210,8 @@ def market_salary(track: str, budget: str) -> str:
         "product": "Rs.8L-28L",
         "design": "Rs.5L-18L",
         "marketing": "Rs.4L-16L",
+        "education": "Rs.3L-12L",
+        "general": "Rs.4L-16L",
         "software": "Rs.6L-24L",
     }.get(track, "Rs.6L-20L")
     if budget == "Limited":

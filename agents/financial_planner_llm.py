@@ -17,48 +17,50 @@ class FinancialPlannerLLMAgent(BaseLLMAgent):
         Create a financial plan for pursuing a career in {career}.
         Viability score: {viability}
 
-        Include:
-        - estimated_total_cost
-        - monthly_budget
-        - cost_breakdown
-        - funding_sources
-        - roi_analysis
-        - risk_mitigation
+        Return only valid JSON with this exact shape:
+        {{
+          "estimated_total_cost": "string",
+          "monthly_budget": "string",
+          "cost_breakdown": "string",
+          "funding_sources": "string",
+          "roi_analysis": "string",
+          "risk_mitigation": "string"
+        }}
         '''
 
         try:
-            response = self.generate(prompt=prompt, temperature=0.6, max_tokens=1200)
-            funding = {
-                "Limited": "Free resources, low-cost cohort courses, employer reimbursement, scholarships",
-                "Moderate": "Savings, EMI-based bootcamps, selective certifications, employer support",
-                "Adequate": "Premium mentoring, certifications, relocation fund, networking events",
-            }[budget]
-            mitigation = "Keep the plan part-time and milestone-based" if mode == "part_time" else "Front-load skill building before expensive commitments"
-            track_breakdown = {
-                "data": "SQL/Python training, analytics tools, portfolio projects, interview prep",
-                "product": "PM courses, case-study coaching, mock interviews, networking events",
-                "design": "Design tools, portfolio refinement, mentorship, case-study reviews",
-                "marketing": "Campaign labs, analytics tools, portfolio projects, certifications",
-                "software": "Courses, cloud credits, portfolio apps, interview practice",
-            }[track]
+            result = self.generate_structured_json(
+                prompt=prompt,
+                required_fields=[
+                    "estimated_total_cost",
+                    "monthly_budget",
+                    "cost_breakdown",
+                    "funding_sources",
+                    "roi_analysis",
+                    "risk_mitigation",
+                ],
+                temperature=0.6,
+                max_tokens=1200,
+            )
 
             return{
-                "estimated_total_cost": ranges["total"],
-                "monthly_budget": ranges["monthly"],
-                "cost_breakdown": track_breakdown,
-                "funding_sources": funding,
-                "roi_analysis": response[:200] if response else f"ROI improves as you convert projects into {career} interview opportunities.",
-                "risk_mitigation": mitigation,
+                "estimated_total_cost": str(result.get("estimated_total_cost", ranges["total"])),
+                "monthly_budget": str(result.get("monthly_budget", ranges["monthly"])),
+                "cost_breakdown": str(result.get("cost_breakdown", "")),
+                "funding_sources": str(result.get("funding_sources", "")),
+                "roi_analysis": str(result.get("roi_analysis", "")),
+                "risk_mitigation": str(result.get("risk_mitigation", "")),
                 "status": "success",
             }
 
         except Exception:
+            mitigation = "Keep the plan part-time and milestone-based" if mode == "part_time" else "Front-load skill building before expensive commitments"
             return{
                 "estimated_total_cost": ranges["total"],
                 "monthly_budget": ranges["monthly"],
-                "cost_breakdown": "Training, portfolio work, interview preparation",
-                "funding_sources": "Savings and low-cost learning paths",
-                "roi_analysis": "Moderate ROI expected when spending stays milestone-based.",
-                "risk_mitigation": "Learn gradually",
+                "cost_breakdown": f"Core training and portfolio work for {career} ({track} track)",
+                "funding_sources": f"Budget-aware options based on {budget} constraints",
+                "roi_analysis": f"ROI depends on converting new skills into interviews for {career}.",
+                "risk_mitigation": mitigation,
                 "status": "fallback",
             }

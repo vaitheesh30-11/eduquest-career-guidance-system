@@ -14,26 +14,35 @@ class RealityCheckMediumLLMAgent(BaseLLMAgent):
         career = ml_results.get("career_field", "this career")
         track = career_track(career)
         prompt =f"""
-        Give moderate reality check for this career.
-        Viability score : {viability}
+        Give a moderate reality check for this career: {career}.
+        Viability score: {viability}
+        Return only valid JSON with this exact shape:
+        {{
+          "honest_assessment": "string",
+          "major_challenges": ["string", "string", "string"],
+          "success_probability": number,
+          "mindset_requirements": ["string", "string", "string"]
+        }}
         """
         try:
-            response = self.generate(prompt,temperature = 0.5,max_tokens = 600)
-            challenges = {
-                "data": ["Skill gap in tools and statistics", "Portfolio credibility", "Competition"],
-                "product": ["Case-study quality", "Stakeholder communication", "Competition"],
-                "design": ["Portfolio quality", "Feedback cycles", "Competition"],
-                "marketing": ["Metrics-driven proof", "Platform changes", "Competition"],
-                "software": ["Skill gap", "Competition", "Time commitment"],
-            }[track]
-            return {
-                "honest_assessment":response[:180],
-                "major_challenges": challenges,
-                "success_probability": round(viability*100,1),
-                "mindset_requirements":[
-                    "Consistency",
-                    "patience",
+            result = self.generate_structured_json(
+                prompt=prompt,
+                required_fields=[
+                    "honest_assessment",
+                    "major_challenges",
+                    "success_probability",
+                    "mindset_requirements",
                 ],
+                temperature=0.5,
+                max_tokens=700,
+            )
+            success_probability = float(result.get("success_probability", round(viability * 100, 1)))
+            success_probability = max(0.0, min(100.0, success_probability))
+            return {
+                "honest_assessment": str(result.get("honest_assessment", "")),
+                "major_challenges": list(result.get("major_challenges", []))[:4],
+                "success_probability": round(success_probability, 1),
+                "mindset_requirements": list(result.get("mindset_requirements", []))[:4],
                 "status":"success",
             }
         except Exception:

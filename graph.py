@@ -50,6 +50,8 @@ def build_eduquest_graph(client:GeminiClient):
     graph.add_node("financial",lambda s: financial_planner_node(s,client))
     graph.add_node("roadmap_full",lambda s: roadmap_builder_full_node(s,client))
     graph.add_node("alternatives",lambda s:alternative_explorer_node(s,client))
+    graph.add_node("alternatives_medium",lambda s:alternative_explorer_node(s,client))
+    graph.add_node("alternatives_light",lambda s:alternative_explorer_node(s,client))
     graph.add_node("market_full",lambda s:market_context_full_node(s,client))
 
     graph.add_node("reality_medium",lambda s:reality_check_medium_node(s,client))
@@ -99,11 +101,13 @@ def build_eduquest_graph(client:GeminiClient):
     graph.add_edge("market_full","aggregator")
 
     graph.add_edge("reality_medium","roadmap_medium")
-    graph.add_edge("roadmap_medium","market_medium")
+    graph.add_edge("roadmap_medium","alternatives_medium")
+    graph.add_edge("alternatives_medium","market_medium")
     graph.add_edge("market_medium","aggregator")
 
     graph.add_edge("reality_light","roadmap_light")
-    graph.add_edge("roadmap_light","market_light")
+    graph.add_edge("roadmap_light","alternatives_light")
+    graph.add_edge("alternatives_light","market_light")
     graph.add_edge("market_light","aggregator")
 
     graph.add_edge("aggregator",END)
@@ -116,13 +120,14 @@ def assess_career(form_data: Dict[str,str])-> Dict[str,Any]:
 
         state = get_initial_state(form_data)
         client = GeminiClient()
+        import sys
+        print(f"GEMINI STATUS: {client.debug_status()}", file=sys.stderr)
 
         graph = build_eduquest_graph(client)
         final_state = graph.invoke(state)
         final_state["processing_complete"] = True
         final_state['error_occured'] = False
         
-        import sys
         print(f"DEBUG: Final state keys: {list(final_state.keys())}", file=sys.stderr)
         print(f"DEBUG: viability_score={final_state.get('viability_score')}", file=sys.stderr)
         print(f"DEBUG: academic_fit_score={final_state.get('academic_fit_score')}", file=sys.stderr)
@@ -195,6 +200,4 @@ def get_workflow_info():
 
 
     
-
-
 

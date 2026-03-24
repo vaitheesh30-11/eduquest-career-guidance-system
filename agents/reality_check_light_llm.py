@@ -13,24 +13,36 @@ class RealityCheckLightLLMAgent(BaseLLMAgent):
         viability = ml_results.get("viability_score",0.5)
         career = ml_results.get("career_field", "this career")
         track = career_track(career)
-        prompt = f"Give short reality check for this career. Viability score: {viability}"
+        prompt = f"""
+        Give a short reality check for this career: {career}.
+        Viability score: {viability}
+        Return only valid JSON with this exact shape:
+        {{
+          "honest_assessment": "string",
+          "major_challenges": ["string", "string"],
+          "success_probability": number,
+          "mindset_requirements": ["string", "string"]
+        }}
+        """
         try :
-            response = self.generate(prompt,temperature =0.5,max_tokens = 350)
-            main_challenge = {
-                "data": "Skill learning in analytics tools",
-                "product": "Turning experience into product stories",
-                "design": "Building a stronger portfolio",
-                "marketing": "Showing measurable campaign impact",
-                "software": "Skill learning",
-            }[track]
-            return {
-                "honest_assessment":response[:150],
-                "major_challenges":[
-                    main_challenge,
-                    "Consistency",
+            result = self.generate_structured_json(
+                prompt=prompt,
+                required_fields=[
+                    "honest_assessment",
+                    "major_challenges",
+                    "success_probability",
+                    "mindset_requirements",
                 ],
-                "success_probability":round(viability*100,1),
-                "mindset_requirements":["Persistence"],
+                temperature=0.5,
+                max_tokens=450,
+            )
+            success_probability = float(result.get("success_probability", round(viability * 100, 1)))
+            success_probability = max(0.0, min(100.0, success_probability))
+            return {
+                "honest_assessment": str(result.get("honest_assessment", "")),
+                "major_challenges": list(result.get("major_challenges", []))[:3],
+                "success_probability": round(success_probability, 1),
+                "mindset_requirements": list(result.get("mindset_requirements", []))[:3],
                 "status":"success",
             }
         except Exception:
