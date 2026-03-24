@@ -2,11 +2,15 @@
 
 from typing import Dict, Any
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import MarketContextOutput
 from agents.personalization import career_track, city_hotspots, market_salary
 
 
 
 class MarketContextLightLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return MarketContextOutput.model_validate(payload).model_dump()
+
     def get_market_context(self , career_field : str, budget: str = "Moderate") -> Dict[str , Any]:
         track = career_track(career_field)
         prompt = f"""
@@ -43,7 +47,7 @@ class MarketContextLightLLMAgent(BaseLLMAgent):
                 temperature=0.4,
                 max_tokens=550,
             )
-            return {
+            return self._validate_output(self._with_response_source({
                 "job_demand_trend": str(result.get("job_demand_trend", "")),
                 "salary_rang_inr" : str(result.get("salary_rang_inr", market_salary(track, budget))),
                 "growth_forecast" : str(result.get("growth_forecast", "")),
@@ -54,7 +58,7 @@ class MarketContextLightLLMAgent(BaseLLMAgent):
                 "emerging_opportunities" : str(result.get("emerging_opportunities", "")),
                 "market_risks" : str(result.get("market_risks", "")),
                 "status" : "success",
-            }
+            }, "llm_structured"))
         except Exception:
             try:
                 raw = self.generate_direct(
@@ -62,7 +66,7 @@ class MarketContextLightLLMAgent(BaseLLMAgent):
                     temperature=0.4,
                     max_tokens=350,
                 )
-                return {
+                return self._validate_output(self._with_response_source({
                     "job_demand_trend": "Stable to Growing",
                     "salary_rang_inr": market_salary(track, budget),
                     "growth_forecast": "Moderate",
@@ -73,10 +77,10 @@ class MarketContextLightLLMAgent(BaseLLMAgent):
                     "emerging_opportunities": "Remote/hybrid roles and specialization",
                     "market_risks": "Competition and changing hiring expectations",
                     "status": "success",
-                }
+                }, "llm_direct"))
             except Exception:
                 # Intelligent fallback for light path
-                return {
+                return self._validate_output(self._with_response_source({
                     "job_demand_trend": "High",
                     "salary_rang_inr": market_salary(track, budget),
                     "growth_forecast": "Moderate to High",
@@ -87,4 +91,4 @@ class MarketContextLightLLMAgent(BaseLLMAgent):
                     "emerging_opportunities": "Remote work, flexibility, and specialization",
                     "market_risks": "Rapid changes in role requirements and competition",
                     "status": "fallback",
-                }
+                }, "fallback"))

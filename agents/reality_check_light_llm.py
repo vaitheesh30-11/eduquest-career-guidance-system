@@ -3,9 +3,13 @@
 from typing import Dict, Any
 
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import RealityCheckOutput
 from agents.personalization import career_track
 
 class RealityCheckLightLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return RealityCheckOutput.model_validate(payload).model_dump()
+
     def generate_reality_check(
         self,
         ml_results:Dict[str,Any],
@@ -38,16 +42,16 @@ class RealityCheckLightLLMAgent(BaseLLMAgent):
             )
             success_probability = float(result.get("success_probability", round(viability * 100, 1)))
             success_probability = max(0.0, min(100.0, success_probability))
-            return {
+            return self._validate_output(self._with_response_source({
                 "honest_assessment": str(result.get("honest_assessment", "")),
                 "major_challenges": list(result.get("major_challenges", []))[:3],
                 "success_probability": round(success_probability, 1),
                 "mindset_requirements": list(result.get("mindset_requirements", []))[:3],
                 "status":"success",
-            }
+            }, "llm_structured"))
         except Exception:
             viability_pct = round(viability * 100, 1)
-            return {
+            return self._validate_output(self._with_response_source({
                 "honest_assessment": f"This career change is feasible. With {viability_pct}% viability, you have potential. Start with foundational learning, build projects, and gradually progress. Stay consistent and adaptable.",
                 "major_challenges": [
                     "Initial learning curve",
@@ -61,4 +65,4 @@ class RealityCheckLightLLMAgent(BaseLLMAgent):
                     "Long-term commitment"
                 ],
                 "status": "success",
-            }
+            }, "fallback"))

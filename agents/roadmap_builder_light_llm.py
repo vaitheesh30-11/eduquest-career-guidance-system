@@ -2,11 +2,48 @@
 
 from typing import Dict, Any
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import LightRoadmapOutput
 from agents.personalization import career_track, roadmap_theme
 
 TM="3 months"
 
 class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return LightRoadmapOutput.model_validate(payload).model_dump()
+
+    def _normalize_roadmap_schema(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(result or {})
+
+        if "phase_1_foundation" not in normalized and "phase_1_months" in normalized:
+            normalized["phase_1_foundation"] = normalized.get("phase_1_months", {})
+        if "phase_2_foundation" not in normalized and "phase_2_months" in normalized:
+            normalized["phase_2_foundation"] = normalized.get("phase_2_months", {})
+        if "phase_3_foundation" not in normalized and "phase_3_months" in normalized:
+            normalized["phase_3_foundation"] = normalized.get("phase_3_months", {})
+
+        if "phase_1_foundation" not in normalized and "q1" in normalized:
+            normalized["phase_1_foundation"] = normalized.get("q1", {})
+        if "phase_2_foundation" not in normalized and "q2" in normalized:
+            normalized["phase_2_foundation"] = normalized.get("q2", {})
+        if "phase_3_foundation" not in normalized and "q3" in normalized:
+            normalized["phase_3_foundation"] = normalized.get("q3", {})
+
+        if "critical_resources" not in normalized and "success_resources" in normalized:
+            normalized["critical_resources"] = normalized.get("success_resources", [])
+
+        for phase_key in ["phase_1_foundation", "phase_2_foundation", "phase_3_foundation"]:
+            phase = normalized.get(phase_key)
+            if isinstance(phase, dict):
+                if "duration" not in phase and "months" in phase:
+                    phase["duration"] = phase.get("months")
+                if "focus" not in phase:
+                    goals = phase.get("goals", [])
+                    if isinstance(goals, list) and goals:
+                        phase["focus"] = goals[0]
+                normalized[phase_key] = phase
+
+        return normalized
+
     def _extract_points(self, text: str, limit: int = 8):
         points = []
         for line in (text or "").splitlines():
@@ -45,9 +82,16 @@ class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
         """
 
         try:
-            result = self.generate_structured_json(
+            raw = self.generate_direct(
                 prompt=prompt,
-                required_fields=[
+                temperature=0.5,
+                max_tokens=900,
+            )
+            result = self.client.extract_json_from_response(raw)
+            result = self._normalize_roadmap_schema(result)
+            self.client.validate_response_fields(
+                result,
+                [
                     "phase_1_foundation",
                     "phase_2_foundation",
                     "phase_3_foundation",
@@ -57,11 +101,9 @@ class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
                     "phase_success_signals",
                     "weekly_routine",
                 ],
-                temperature=0.5,
-                max_tokens=900,
             )
 
-            return{
+            return self._validate_output(self._with_response_source({
                 "phase_1_foundation": result.get("phase_1_foundation", {}),
                 "phase_2_foundation": result.get("phase_2_foundation", {}),
                 "phase_3_foundation": result.get("phase_3_foundation", {}),
@@ -71,7 +113,7 @@ class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
                 "phase_success_signals": list(result.get("phase_success_signals", [])),
                 "weekly_routine": list(result.get("weekly_routine", [])),
                 "status": "success"
-            }
+            }, "llm_direct"))
         except Exception:
             try:
                 raw = self.generate_direct(
@@ -83,7 +125,7 @@ class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
                 p1 = points[:2] if len(points) >= 2 else [f"Learn {theme['foundation'][0]}", f"Practice {theme['foundation'][1]}"]
                 p2 = points[2:4] if len(points) >= 4 else [f"Build {theme['build'][0]}", f"Show {theme['build'][1]}"]
                 p3 = points[4:6] if len(points) >= 6 else [f"Prepare for {career} roles", f"Strengthen {theme['launch'][1]}"]
-                return {
+                return self._validate_output(self._with_response_source({
                     "phase_1_foundation": {"duration": TM, "focus": f"Basics for {career}", "goals": p1, "actions": ["Foundational learning", "Weekly exercises"]},
                     "phase_2_foundation": {"duration": TM, "focus": "Practice", "goals": p2, "actions": ["Project execution", "Outcome documentation"]},
                     "phase_3_foundation": {"duration": TM, "focus": "Job readiness", "goals": p3, "actions": ["Applications", "Interview practice"]},
@@ -93,11 +135,11 @@ class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
                     "phase_success_signals": points[2:4] if len(points) >= 4 else ["Clear weekly progress", "Confidence in fundamentals"],
                     "weekly_routine": points[4:7] if len(points) >= 7 else ["3 short study sessions", "2 practice sessions", "1 review session"],
                     "status": "success",
-                }
+                }, "llm_direct"))
             except Exception:
                 pass
 
-            return{
+            return self._validate_output(self._with_response_source({
                 "phase_1_foundation": {
                     "duration": TM,
                     "focus": f"Basics for {career}",
@@ -122,4 +164,4 @@ class RoadmapBuilderLightLLMAgent(BaseLLMAgent):
                 "phase_success_signals": ["You can explain fundamentals clearly", "You can show at least one practical outcome"],
                 "weekly_routine": ["3 short study sessions", "2 hands-on practice blocks", "1 weekly review"],
                 "status": "fallback",
-            }
+            }, "fallback"))

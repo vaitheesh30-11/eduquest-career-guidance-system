@@ -2,11 +2,14 @@
 
 from typing import Dict, Any
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import MarketContextOutput
 from agents.personalization import career_track, city_hotspots, market_salary
 
 
 
 class MarketContextFullLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return MarketContextOutput.model_validate(payload).model_dump()
 
     def get_market_context(self,career_field: str, budget: str = "Moderate") -> Dict[str,Any]:
         track = career_track(career_field)
@@ -43,7 +46,7 @@ class MarketContextFullLLMAgent(BaseLLMAgent):
                 temperature=0.4,
                 max_tokens=1000,
             )
-            return{
+            return self._validate_output(self._with_response_source({
                 "job_demand_trend": str(result.get("job_demand_trend", "")),
                 "salary_rang_inr" : str(result.get("salary_rang_inr", market_salary(track, budget))),
                 "growth_forecast" : str(result.get("growth_forecast", "")),
@@ -54,7 +57,7 @@ class MarketContextFullLLMAgent(BaseLLMAgent):
                 "emerging_opportunities" : str(result.get("emerging_opportunities", "")),
                 "market_risks" : str(result.get("market_risks", "")),
                 "status" : "success",
-            }
+            }, "llm_structured"))
         except Exception:
             try:
                 raw = self.generate_direct(
@@ -62,7 +65,7 @@ class MarketContextFullLLMAgent(BaseLLMAgent):
                     temperature=0.4,
                     max_tokens=700,
                 )
-                return {
+                return self._validate_output(self._with_response_source({
                     "job_demand_trend": "Moderate to High",
                     "salary_rang_inr": market_salary(track, budget),
                     "growth_forecast": "Growing",
@@ -73,9 +76,9 @@ class MarketContextFullLLMAgent(BaseLLMAgent):
                     "emerging_opportunities": "AI-enabled tools, specialization, and remote/hybrid opportunities",
                     "market_risks": "Market cycles, hiring volatility, and skill mismatch",
                     "status": "success",
-                }
+                }, "llm_direct"))
             except Exception:
-                return {
+                return self._validate_output(self._with_response_source({
                     "job_demand_trend": "Moderate to High",
                     "salary_rang_inr": market_salary(track, budget),
                     "growth_forecast": "Steady growth expected",
@@ -86,4 +89,4 @@ class MarketContextFullLLMAgent(BaseLLMAgent):
                     "emerging_opportunities": "Digital adoption, specialization, and remote/hybrid roles",
                     "market_risks": "Economic cycles, changing hiring criteria, and skill mismatch",
                     "status": "fallback",
-                }
+                }, "fallback"))

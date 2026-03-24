@@ -2,11 +2,15 @@
 
 from typing import Dict, Any
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import MediumRoadmapOutput
 from agents.personalization import career_track, roadmap_theme
 
 
 
 class RoadmapBuilderMediumLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return MediumRoadmapOutput.model_validate(payload).model_dump()
+
     def _extract_points(self, text: str, limit: int = 4):
         points = []
         for line in (text or "").splitlines():
@@ -63,7 +67,7 @@ class RoadmapBuilderMediumLLMAgent(BaseLLMAgent):
                 max_tokens=1100,
             )
 
-            return {
+            return self._validate_output(self._with_response_source({
                 "q1": result.get("q1", {}),
                 "q2": result.get("q2", {}),
                 "q3": result.get("q3", {}),
@@ -74,7 +78,7 @@ class RoadmapBuilderMediumLLMAgent(BaseLLMAgent):
                 "phase_success_signals": list(result.get("phase_success_signals", [])),
                 "weekly_routine": list(result.get("weekly_routine", [])),
                 "status": "success"
-            }
+            }, "llm_structured"))
 
         except Exception:
             try:
@@ -88,7 +92,7 @@ class RoadmapBuilderMediumLLMAgent(BaseLLMAgent):
                 q2 = points[2:4] if len(points) >= 4 else [f"Build {theme['build'][0]}", f"Build {theme['build'][1]}"]
                 q3 = points[4:6] if len(points) >= 6 else [f"Refine {theme['build'][1]}", f"Strengthen {theme['build'][2]}"]
                 q4 = points[6:8] if len(points) >= 8 else [f"Prepare for {career} interviews", f"Show {theme['launch'][0]} evidence"]
-                return {
+                return self._validate_output(self._with_response_source({
                     "q1": {"goals": q1, "actions": ["Weekly study plan", "Practice and review"]},
                     "q2": {"goals": q2, "actions": ["Build projects", "Track outcomes"]},
                     "q3": {"goals": q3, "actions": ["Portfolio refinement", "Mock reviews"]},
@@ -99,11 +103,11 @@ class RoadmapBuilderMediumLLMAgent(BaseLLMAgent):
                     "phase_success_signals": points[3:6] if len(points) > 5 else ["Consistent progress each month", "Visible portfolio growth"],
                     "weekly_routine": points[6:9] if len(points) > 8 else ["2 learning blocks", "2 practice blocks", "1 review block"],
                     "status": "success",
-                }
+                }, "llm_direct"))
             except Exception:
                 pass
 
-            return {
+            return self._validate_output(self._with_response_source({
                 "q1": {"goals": [f"Learn {theme['foundation'][0]}", f"Practice {theme['foundation'][1]}"], "actions": ["Weekly study blocks", "Concept revision"]},
                 "q2": {"goals": [f"Build {theme['build'][0]}", f"Show progress in {theme['build'][1]}"], "actions": ["Hands-on projects", "Monthly reviews"]},
                 "q3": {"goals": [f"Refine {theme['build'][1]}", f"Strengthen {theme['build'][2]}"], "actions": ["Portfolio polishing", "Peer feedback"]},
@@ -114,4 +118,4 @@ class RoadmapBuilderMediumLLMAgent(BaseLLMAgent):
                 "phase_success_signals": ["Consistent weekly progress", "Portfolio artifacts ready", "Mock interview confidence improving"],
                 "weekly_routine": ["2 learning sessions", "2 practice sessions", "1 review/reflection session"],
                 "status": "fallback"
-            }
+            }, "fallback"))

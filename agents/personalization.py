@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, List, Optional
+from utils.logging_utils import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def split_items(text: str) -> List[str]:
@@ -112,25 +115,24 @@ def infer_projects(current_academics: str, interests: str, concerns: str) -> Opt
 
 def career_track(career_field: str) -> str:
     text = (career_field or "").lower()
-    import sys
     
     if any(token in text for token in ["data", "ai", "ml", "machine learning", "analytics"]):
-        print(f"career_track({career_field}) -> 'data'", file=sys.stderr)
+        log_event(logger, 10, "career_track_inferred", career_field=career_field, inferred_track="data")
         return "data"
     if any(token in text for token in ["product", "manager", "strategy", "business analyst"]):
-        print(f"career_track({career_field}) -> 'product'", file=sys.stderr)
+        log_event(logger, 10, "career_track_inferred", career_field=career_field, inferred_track="product")
         return "product"
     if any(token in text for token in ["design", "ux", "ui", "graphic"]):
-        print(f"career_track({career_field}) -> 'design'", file=sys.stderr)
+        log_event(logger, 10, "career_track_inferred", career_field=career_field, inferred_track="design")
         return "design"
     if any(token in text for token in ["marketing", "sales", "growth", "seo"]):
-        print(f"career_track({career_field}) -> 'marketing'", file=sys.stderr)
+        log_event(logger, 10, "career_track_inferred", career_field=career_field, inferred_track="marketing")
         return "marketing"
     if any(token in text for token in ["teacher", "teaching", "educator", "professor", "lecturer", "tutor", "faculty", "school"]):
-        print(f"career_track({career_field}) -> 'education'", file=sys.stderr)
+        log_event(logger, 10, "career_track_inferred", career_field=career_field, inferred_track="education")
         return "education"
     
-    print(f"career_track({career_field}) -> 'general' (DEFAULT)", file=sys.stderr)
+    log_event(logger, 10, "career_track_inferred", career_field=career_field, inferred_track="general")
     return "general"
 
 

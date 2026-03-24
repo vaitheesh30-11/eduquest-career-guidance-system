@@ -162,10 +162,12 @@ class AcademicCareerMatcherMLAgent:
 
             return{
                 "academic_fit_score":score,
-                "status": "success"
+                "status": "success",
+                "response_source":"ml_model" if self.model is not None else "fallback",
             }
         except Exception:
             return{
                 "academic_fit_score": 50.0,
-                "status":"fallback"
+                "status":"fallback",
+                "response_source":"fallback",
             }

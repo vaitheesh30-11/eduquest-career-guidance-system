@@ -2,10 +2,13 @@
 
 from typing import Dict, Any, List
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import AlternativesOutput
 from agents.personalization import career_track
 
 
 class AlternativeExplorerLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return AlternativesOutput.model_validate(payload).model_dump()
 
     def __init__(self, client):
         super().__init__(client)
@@ -61,11 +64,11 @@ class AlternativeExplorerLLMAgent(BaseLLMAgent):
                 )
             if not alternatives:
                 raise ValueError("LLM returned empty alternatives list")
-            return {
+            return self._validate_output(self._with_response_source({
                 "alternatives": alternatives,
                 "summary": str(result.get("summary", "Generated alternative career paths")),
                 "status": "success",
-            }
+            }, "llm_structured"))
 
         except Exception:
             # Generate intelligent alternatives based on dream career
@@ -189,8 +192,8 @@ class AlternativeExplorerLLMAgent(BaseLLMAgent):
                     }
                 ]
             
-            return {
+            return self._validate_output(self._with_response_source({
                 "alternatives": alternatives,
                 "summary": "Personalized career alternatives based on your target role and market analysis",
                 "status": "success",
-            }
+            }, "fallback"))

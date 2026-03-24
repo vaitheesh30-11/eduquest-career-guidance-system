@@ -43,7 +43,10 @@ class EduQuestState(TypedDict,total=False):
   
     viability_score:float
     viability_status:str
+    viability_ml_observability:Dict[str,Any]
     academic_fit_score:float
+    academic_status:str
+    academic_ml_observability:Dict[str,Any]
 
     path_taken:str
     daily_budget_tier:str
@@ -62,6 +65,8 @@ class EduQuestState(TypedDict,total=False):
     market_context_light:Dict[str,Any]
 
     aggregated_output:Dict[str,Any]
+    ml_observability:Dict[str,Any]
+    llm_observability:Dict[str,Any]
 
 def get_initial_state(form_data:Dict[str,Any])->EduQuestState:
     raw_inputs = {
@@ -93,12 +98,16 @@ def get_initial_state(form_data:Dict[str,Any])->EduQuestState:
         "viability_score":0.0,
         "academic_fit_score":0.0,
         "viability_status":"",
+        "academic_status":"",
+        "viability_ml_observability":{},
+        "academic_ml_observability":{},
         "path_taken":"",
         "daily_budget_tier":"",
         "overall_feasibility":0.0,
        
-        "aggregated_output":{}
+        "aggregated_output":{},
+        "ml_observability":{},
+        "llm_observability":{},
     }
     return state
-
 

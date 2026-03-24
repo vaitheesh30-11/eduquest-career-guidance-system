@@ -163,11 +163,13 @@ class CareerViabilityScorerMLAgent:
 
             return{
                 "viability_score":score,
-                "status":"success"
+                "status":"success",
+                "response_source":"ml_model" if self.model is not None else "fallback",
             }
 
         except Exception :
             return{
                 "viability_score":0.5,
                 "status":"fallback",
+                "response_source":"fallback",
             }

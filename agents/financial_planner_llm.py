@@ -2,10 +2,14 @@
 
 from typing import Dict, Any
 from .base_llm_agent import BaseLLMAgent
+from .output_schemas import FinancialPlanOutput
 from .personalization import budget_ranges, career_track, learning_mode
 
 
 class FinancialPlannerLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return FinancialPlanOutput.model_validate(payload).model_dump()
+
     def generate_financial_plan(self, profile: Dict[str, Any], ml_results:Dict[str, Any])->Dict[str,Any]:
         viability = ml_results.get("viability_score", ml_results.get("success_probability", 50) / 100)
         career = profile.get("career_field", "Unknown")
@@ -43,7 +47,7 @@ class FinancialPlannerLLMAgent(BaseLLMAgent):
                 max_tokens=1200,
             )
 
-            return{
+            return self._validate_output(self._with_response_source({
                 "estimated_total_cost": str(result.get("estimated_total_cost", ranges["total"])),
                 "monthly_budget": str(result.get("monthly_budget", ranges["monthly"])),
                 "cost_breakdown": str(result.get("cost_breakdown", "")),
@@ -51,11 +55,11 @@ class FinancialPlannerLLMAgent(BaseLLMAgent):
                 "roi_analysis": str(result.get("roi_analysis", "")),
                 "risk_mitigation": str(result.get("risk_mitigation", "")),
                 "status": "success",
-            }
+            }, "llm_structured"))
 
         except Exception:
             mitigation = "Keep the plan part-time and milestone-based" if mode == "part_time" else "Front-load skill building before expensive commitments"
-            return{
+            return self._validate_output(self._with_response_source({
                 "estimated_total_cost": ranges["total"],
                 "monthly_budget": ranges["monthly"],
                 "cost_breakdown": f"Core training and portfolio work for {career} ({track} track)",
@@ -63,4 +67,4 @@ class FinancialPlannerLLMAgent(BaseLLMAgent):
                 "roi_analysis": f"ROI depends on converting new skills into interviews for {career}.",
                 "risk_mitigation": mitigation,
                 "status": "fallback",
-            }
+            }, "fallback"))

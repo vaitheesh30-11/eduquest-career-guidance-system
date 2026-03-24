@@ -2,9 +2,13 @@
 
 from typing import Dict, Any
 from agents.base_llm_agent import BaseLLMAgent 
+from agents.output_schemas import RealityCheckOutput
 from agents.personalization import career_track, learning_mode
 
 class RealityCheckFullLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return RealityCheckOutput.model_validate(payload).model_dump()
+
     def generate_reality_check(
         self,
         ml_results : Dict[str,Any],
@@ -45,14 +49,14 @@ class RealityCheckFullLLMAgent(BaseLLMAgent):
                 mindset = mindset + ["Disciplined scheduling around existing commitments"]
             success_probability = float(result.get("success_probability", round(viability * 100, 1)))
             success_probability = max(0.0, min(100.0, success_probability))
-            return {
+            return self._validate_output(self._with_response_source({
                 "honest_assessment": str(result.get("honest_assessment", "")),
                 "major_challenges": list(result.get("major_challenges", []))[:5],
                 "success_probability": round(success_probability, 1),
                 "mindset_requirements": mindset,
                 "status":"success",
 
-            }
+            }, "llm_structured"))
         except Exception :
             # Intelligent fallback assessment based on ML scores
             viability_pct = round(viability * 100, 1)
@@ -87,7 +91,7 @@ class RealityCheckFullLLMAgent(BaseLLMAgent):
                 ]
                 success = min(55, round(viability_pct + academic_pct / 2))
             
-            return {
+            return self._validate_output(self._with_response_source({
                 "honest_assessment": honest,
                 "major_challenges": challenges,
                 "success_probability": success,
@@ -99,4 +103,4 @@ class RealityCheckFullLLMAgent(BaseLLMAgent):
                     "Proactive networking and community engagement"
                 ],
                 "status": "success",
-            }
+            }, "fallback"))

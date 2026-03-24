@@ -1,8 +1,10 @@
 """Base class for all LLM-based agents in EduQuest."""
 
 import re
-import sys
 from utils.gemini_client import GeminiClient
+from utils.logging_utils import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def extract_career_from_prompt(prompt: str) -> str:
@@ -74,6 +76,19 @@ class BaseLLMAgent:
         self.client = client
         self.is_available = client is not None and hasattr(client, 'is_initialized') and client.is_initialized
 
+    def _trace_metadata(self, operation: str, **extra: object) -> dict:
+        return {
+            "agent_name": self.__class__.__name__,
+            "operation": operation,
+            "client_model": getattr(self.client, "model", None),
+            **extra,
+        }
+
+    def _with_response_source(self, payload: dict, source: str) -> dict:
+        enriched = dict(payload)
+        enriched["response_source"] = source
+        return enriched
+
     def generate(
         self,
         prompt : str,
@@ -86,11 +101,13 @@ class BaseLLMAgent:
         
         # Return mock response if no client available
         if not self.is_available:
-            print(
-                f"LLM FALLBACK: client unavailable in {self.__class__.__name__} "
-                f"(initialized={getattr(self.client, 'is_initialized', False)}, "
-                f"last_error={getattr(self.client, 'last_error', None)})",
-                file=sys.stderr,
+            log_event(
+                logger,
+                30,
+                "llm_client_unavailable",
+                agent_name=self.__class__.__name__,
+                initialized=getattr(self.client, "is_initialized", False),
+                last_error=getattr(self.client, "last_error", None),
             )
             return self._get_mock_response(prompt)
 
@@ -115,6 +132,12 @@ class BaseLLMAgent:
                     prompt=prompt,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    trace_name=f"{self.__class__.__name__}.generate_direct",
+                    trace_tags=["llm-agent", self.__class__.__name__],
+                    trace_metadata=self._trace_metadata(
+                        "generate_direct",
+                        response_format="text",
+                    ),
                 )
             )
         if hasattr(self.client, "generate"):
@@ -147,10 +170,7 @@ class BaseLLMAgent:
 
         except Exception as e:
             # Fall back to mock response if generation fails
-            print(
-                f"LLM FALLBACK: generation failed in {self.__class__.__name__}: {e}",
-                file=sys.stderr,
-            )
+            log_event(logger, 30, "llm_generation_failed", agent_name=self.__class__.__name__, error=str(e))
             return self._get_mock_response(prompt)
     
     def _get_mock_response(self, prompt: str) -> str:
@@ -240,4 +260,11 @@ class BaseLLMAgent:
             required_fields=required_fields,
             temperature=temperature,
             max_tokens=max_tokens,
+            trace_name=f"{self.__class__.__name__}.generate_structured_json",
+            trace_tags=["llm-agent", self.__class__.__name__],
+            trace_metadata=self._trace_metadata(
+                "generate_structured_json",
+                response_format="json",
+                required_fields=",".join(required_fields),
+            ),
         )

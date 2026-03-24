@@ -2,12 +2,16 @@
 
 from typing import Dict, Any
 from agents.base_llm_agent import BaseLLMAgent
+from agents.output_schemas import FullRoadmapOutput
 from agents.personalization import career_track, learning_mode, roadmap_theme
 
 
 ONLINE_COURSES="Online courses"
 
 class RoadmapBuilderFullLLMAgent(BaseLLMAgent):
+    def _validate_output(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return FullRoadmapOutput.model_validate(payload).model_dump()
+
     def _extract_points(self, text: str, limit: int = 12):
         points = []
         for line in (text or "").splitlines():
@@ -68,7 +72,7 @@ class RoadmapBuilderFullLLMAgent(BaseLLMAgent):
                 max_tokens=1500,
             )
 
-            return{
+            return self._validate_output(self._with_response_source({
                 "phase_1_months": result.get("phase_1_months", {}),
                 "phase_2_months": result.get("phase_2_months", {}),
                 "phase_3_months": result.get("phase_3_months", {}),
@@ -78,7 +82,7 @@ class RoadmapBuilderFullLLMAgent(BaseLLMAgent):
                 "phase_success_signals": list(result.get("phase_success_signals", [])),
                 "weekly_routine": list(result.get("weekly_routine", [])),
                 "status": "success"
-            }
+            }, "llm_structured"))
         except Exception:
             try:
                 raw = self.generate_direct(
@@ -90,7 +94,7 @@ class RoadmapBuilderFullLLMAgent(BaseLLMAgent):
                 p1 = points[:3] if len(points) >= 3 else [f"Build {item}" for item in theme["foundation"]]
                 p2 = points[3:6] if len(points) >= 6 else [f"Strengthen {item}" for item in theme["build"]]
                 p3 = points[6:9] if len(points) >= 9 else [f"Convert {item} into job-ready proof" for item in theme["launch"]]
-                return {
+                return self._validate_output(self._with_response_source({
                     "phase_1_months": {"months": foundation_duration, "goals": p1, "actions": ["Structured study", "Mentor check-ins", "Practice tasks"]},
                     "phase_2_months": {"months": build_duration, "goals": p2, "actions": ["Project implementation", "Portfolio evidence", "Gap reviews"]},
                     "phase_3_months": {"months": launch_duration, "goals": p3, "actions": ["Mock interviews", "Applications", "Networking"]},
@@ -100,11 +104,11 @@ class RoadmapBuilderFullLLMAgent(BaseLLMAgent):
                     "phase_success_signals": points[4:7] if len(points) >= 7 else ["Weekly consistency", "Increasing project depth", "Interview confidence"],
                     "weekly_routine": points[7:10] if len(points) >= 10 else ["2 learning blocks", "2 project blocks", "1 review block"],
                     "status": "success",
-                }
+                }, "llm_direct"))
             except Exception:
                 pass
 
-            return {
+            return self._validate_output(self._with_response_source({
                 "phase_1_months": {
                     "goals": [f"Build {theme['foundation'][0]}"],
                     "actions": ["Courses"]
@@ -123,4 +127,4 @@ class RoadmapBuilderFullLLMAgent(BaseLLMAgent):
                 "phase_success_signals": ["Weekly consistency", "Visible project output", "Interview readiness growth"],
                 "weekly_routine": ["2 deep work study sessions", "2 practical implementation sessions", "1 reflection and correction session"],
                 "status": "fallback"
-            }
+            }, "fallback"))

@@ -8,6 +8,9 @@ from graph import assess_career
 from state import get_initial_state
 from ml.evaluation import evaluate_all_models
 import os
+from utils.logging_utils import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def initialize_session_state ()->None :
@@ -460,16 +463,16 @@ def main()->None:
             st.sidebar.error("Please enter your dream career")
             st.stop()
         
-        # DEBUG: Print inputs to terminal
-        import sys
-        print(f"\n{'='*70}", file=sys.stderr)
-        print(f"USER INPUT DEBUG:", file=sys.stderr)
-        print(f"  dream_career: '{dream_career}'", file=sys.stderr)
-        print(f"  current_academics: '{current_academics}'", file=sys.stderr)
-        print(f"  constraints: '{constraints}'", file=sys.stderr)
-        print(f"  interests: '{interests}'", file=sys.stderr)
-        print(f"  other_concerns: '{other_concerns}'", file=sys.stderr)
-        print(f"{'='*70}\n", file=sys.stderr)
+        log_event(
+            logger,
+            20,
+            "streamlit_assess_clicked",
+            dream_career=dream_career,
+            current_academics=current_academics,
+            constraints=constraints,
+            interests=interests,
+            other_concerns=other_concerns,
+        )
         
         form_data = {
             "dream_career": dream_career,
@@ -486,11 +489,16 @@ def main()->None:
             # New assessment means evaluation cache should refresh on next request.
             st.session_state.evaluated_request_id = None
             
-            # DEBUG: Show extracted profile
             extracted_profile = result.get("extracted_profile", {})
-            print(f"\nEXTRACTED PROFILE DEBUG:", file=sys.stderr)
-            print(f"  career_field: '{extracted_profile.get('career_field')}'", file=sys.stderr)
-            print(f"{'='*70}\n", file=sys.stderr)
+            log_event(
+                logger,
+                20,
+                "streamlit_assessment_result",
+                request_id=result.get("request_id"),
+                career_field=extracted_profile.get("career_field"),
+                path_taken=result.get("path_taken"),
+                error_occurred=result.get("error_occurred"),
+            )
             
             # Debug: Show any errors
             if result.get("error_occurred"):

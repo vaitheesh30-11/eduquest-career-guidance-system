@@ -3,7 +3,9 @@
 from typing import Dict, Any
 from state import EduQuestState
 from agents.profile_extractor_llm import ProfileExtractorLLMAgent
-import sys
+from utils.logging_utils import get_logger, log_event
+
+logger = get_logger(__name__)
 
 
 def profile_extractor_node(state : EduQuestState , client) -> dict:
@@ -11,20 +13,21 @@ def profile_extractor_node(state : EduQuestState , client) -> dict:
     try:
         agent = ProfileExtractorLLMAgent(client)
         raw = state.get("raw_inputs",{})
-        
-        # DEBUG
         dream_career = raw.get("dream_career", "")
-        print(f"\nPROFILE EXTRACTOR DEBUG:", file=sys.stderr)
-        print(f"  Input dream_career: '{dream_career}'", file=sys.stderr)
+        log_event(logger, 20, "profile_extraction_started", request_id=state.get("request_id"), career_field=dream_career)
         
         result = agent.extract_profile(raw)
-        
-        # DEBUG
-        print(f"  Extracted career_field: '{result.get('career_field', '')}'", file=sys.stderr)
-        print(f"{'='*70}\n", file=sys.stderr)
+        log_event(
+            logger,
+            20,
+            "profile_extraction_completed",
+            request_id=state.get("request_id"),
+            career_field=result.get("career_field", ""),
+            extracted_profile=result,
+        )
         
         return {"extracted_profile": result}
 
     except Exception as e:
-        print(f"ERROR in profile extractor: {str(e)}", file=sys.stderr)
+        log_event(logger, 40, "profile_extraction_failed", request_id=state.get("request_id"), error=str(e))
         return {"extracted_profile": {"status" : "error" , "message" : str(e)}}
